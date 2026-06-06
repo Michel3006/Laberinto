@@ -63,8 +63,9 @@ class SocketHandler {
     log('info', 'connect', { socketId: socket.id, ip });
 
     // ── Eventos de sala ──────────────────────────────────────────────────
-    socket.on('create_room', (data) => this._onCreateRoom(socket, data));
-    socket.on('join_room',   (data) => this._onJoinRoom(socket, data, ip));
+    socket.on('create_room',  (data) => this._onCreateRoom(socket, data));
+    socket.on('join_room',    (data) => this._onJoinRoom(socket, data, ip));
+    socket.on('leave_room',   ()     => this._onLeaveRoom(socket));
     socket.on('reconnect_room', (data) => this._onReconnect(socket, data));
 
     // ── Eventos de juego ─────────────────────────────────────────────────
@@ -125,6 +126,21 @@ class SocketHandler {
     // Iniciar partida
     this._startGame(room.id);
     log('info', 'game_start', { roomId: room.id });
+  }
+
+  // ─── Abandonar sala (lobby) ──────────────────────────────────────────────
+
+  _onLeaveRoom(socket) {
+    const roomId = this.rm.getRoomId(socket.id);
+    if (!roomId) return;
+
+    const room = this.rm.getRoom(roomId);
+    // Solo permitir salir si la sala está esperando (no en partida)
+    if (room && room.status === 'waiting') {
+      socket.leave(roomId);
+      this.rm.removeRoom(roomId);
+      log('info', 'room_left', { roomId, socketId: socket.id });
+    }
   }
 
   // ─── Reconexión ──────────────────────────────────────────────────────────
@@ -275,7 +291,13 @@ class SocketHandler {
 
     log('info', 'disconnect', { socketId: socket.id, roomId, reason });
 
-    if (room.status === 'finished' || room.status === 'waiting') return;
+    // Si la sala estaba esperando (sin partida), eliminarla directamente
+    if (room.status === 'waiting') {
+      this.rm.removeRoom(roomId);
+      return;
+    }
+
+    if (room.status === 'finished') return;
 
     // Notificar al oponente
     const other = room.players.find(p => p.color !== player?.color);
