@@ -19,8 +19,16 @@ class RoomManager {
     if (this.rooms.size >= MAX_ROOMS) {
       return { error: 'El servidor está lleno. Intenta más tarde.' };
     }
+
+    // Si ya está en una sala en espera (huérfana), limpiarla primero
     if (this.socketRoom.has(socketId)) {
-      return { error: 'Ya estás en una sala. Sal primero.' };
+      const oldRoomId = this.socketRoom.get(socketId);
+      const oldRoom   = this.rooms.get(oldRoomId);
+      if (oldRoom && oldRoom.status === 'waiting') {
+        this.removeRoom(oldRoomId);
+      } else {
+        return { error: 'Ya estás en una sala. Sal primero.' };
+      }
     }
 
     const roomId = this._generateCode();
@@ -44,8 +52,15 @@ class RoomManager {
   }
 
   joinRoom(socketId, roomId, playerName) {
+    // Si ya está en una sala en espera (huérfana), limpiarla primero
     if (this.socketRoom.has(socketId)) {
-      return { error: 'Ya estás en una sala. Sal primero.' };
+      const oldRoomId = this.socketRoom.get(socketId);
+      const oldRoom   = this.rooms.get(oldRoomId);
+      if (oldRoom && oldRoom.status === 'waiting') {
+        this.removeRoom(oldRoomId);
+      } else {
+        return { error: 'Ya estás en una sala. Sal primero.' };
+      }
     }
 
     const room = this.rooms.get(roomId);
@@ -128,7 +143,11 @@ class RoomManager {
       const isDoneOld  = game && game.status === 'finished' &&
                          (now - game.lastActivity > FINISHED_TIMEOUT);
 
-      if (allGone || isInactive || isDoneOld) {
+      // También purgar salas waiting sin actividad reciente (más de 10 min)
+      const isStaleWaiting = room.status === 'waiting' &&
+                             (now - room.createdAt > 10 * 60 * 1000);
+
+      if (allGone || isInactive || isDoneOld || isStaleWaiting) {
         this.removeRoom(roomId);
         activeGames.delete(roomId);
         count++;
