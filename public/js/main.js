@@ -80,6 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-lobby-back').addEventListener('click', () => {
+    // Notificar al servidor que abandonamos la sala antes de volver al menú
+    client.socket.leaveRoom();
+    client.socket._clearReconnectData();
     client.ui.showScreen('screen-menu');
     client.roomId  = null;
     client.myColor = null;
